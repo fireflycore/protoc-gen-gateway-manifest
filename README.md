@@ -10,6 +10,8 @@
 plugins:
   - local: protoc-gen-gateway-manifest
     out: dep/protobuf/manifest
+    # 单个 gateway.manifest.json 需要合并所有待生成 proto，不能使用 Buf 默认的 directory 策略。
+    strategy: all
     opt:
       - out_file=gateway.manifest.json
       - include_package_prefix=acme.auth.
@@ -19,6 +21,8 @@ plugins:
 ```
 
 没有 `google.api.http` 的 gRPC method 只会作为 gRPC 能力进入 `services[].methods`，不会进入 `routes[]`，也不会被自动合成 HTTP path。
+
+注意：本插件生成的是单个聚合文件，Buf 配置必须设置 `strategy: all`。如果使用默认 `directory` 策略，Buf 会按目录多次调用插件，每次都会生成同名 `gateway.manifest.json`，从而出现 `duplicate generated file name` 并丢弃后续产物。
 
 ## 参数
 
