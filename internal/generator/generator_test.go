@@ -15,11 +15,11 @@ import (
 
 // TestBuildGeneratesAnnotatedRoutesAndKeepsGRPCOnlyMethods 覆盖完整 manifest 生成主路径。
 func TestBuildGeneratesAnnotatedRoutesAndKeepsGRPCOnlyMethods(t *testing.T) {
-	// 构造只包含 app type package 的测试插件，并开启 gRPC-only method 记录。
-	plugin := testPlugin(t, "include_package=acme.app.type.v1,require_include=true,include_unannotated_methods=true,generated_at=2026-05-23T00:00:00Z", appTypeFile())
+	// 构造只包含 app type package 的测试插件。
+	plugin := testPlugin(t, "include_package=acme.app.type.v1", appTypeFile())
 
 	// Build 应当从 descriptor 和 google.api.http annotation 生成 manifest。
-	manifest, err := Build(plugin, mustOptions(t, plugin), "v0.1.0")
+	manifest, err := Build(plugin, mustOptions(t, plugin))
 	// 主路径不应该返回错误。
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -29,7 +29,7 @@ func TestBuildGeneratesAnnotatedRoutesAndKeepsGRPCOnlyMethods(t *testing.T) {
 	if got, want := len(manifest.Services), 1; got != want {
 		t.Fatalf("services len = %d, want %d", got, want)
 	}
-	// 开启 include_unannotated_methods 后，InternalOnly 也应进入 services.methods。
+	// gRPC method 全部进入 services.methods，是否能走 HTTP 只看 routes[]。
 	if got, want := len(manifest.Services[0].Methods), 3; got != want {
 		t.Fatalf("methods len = %d, want %d", got, want)
 	}
@@ -58,23 +58,28 @@ func TestBuildGeneratesAnnotatedRoutesAndKeepsGRPCOnlyMethods(t *testing.T) {
 	}
 }
 
-// TestBuildSkipsUnannotatedMethodsUnlessRequested 确认未标注方法默认不进入 manifest。
-func TestBuildSkipsUnannotatedMethodsUnlessRequested(t *testing.T) {
-	// 不开启 include_unannotated_methods，InternalOnly 应被完全跳过。
-	plugin := testPlugin(t, "include_package=acme.app.type.v1,require_include=true", appTypeFile())
+// TestBuildKeepsUnannotatedMethodsAsGRPCOnly 确认未标注方法保留为 gRPC 能力。
+func TestBuildKeepsUnannotatedMethodsAsGRPCOnly(t *testing.T) {
+	// InternalOnly 没有 google.api.http，但仍然是该 service 的 gRPC method。
+	plugin := testPlugin(t, "include_package=acme.app.type.v1", appTypeFile())
 
 	// 构建 manifest。
-	manifest, err := Build(plugin, mustOptions(t, plugin), "v0.1.0")
+	manifest, err := Build(plugin, mustOptions(t, plugin))
 	// 构建不应该失败。
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
-	// 遍历 service methods，确认 InternalOnly 没被写入。
+	// 遍历 service methods，确认 InternalOnly 仍保留为 gRPC 能力。
+	found := false
 	for _, method := range manifest.Services[0].Methods {
-		// 未标注 google.api.http 的方法默认不允许 HTTP 访问。
-		if method.Name == "InternalOnly" {
-			t.Fatalf("unannotated method should be skipped without include_unannotated_methods")
+		// 未标注 google.api.http 的方法不生成 HTTP route，但 method 本身不能丢。
+		if strings.HasSuffix(method, "/InternalOnly") {
+			found = true
 		}
+	}
+	// 没找到 InternalOnly 说明 gRPC 能力被错误裁剪。
+	if !found {
+		t.Fatalf("unannotated gRPC method should stay in services.methods")
 	}
 	// 再确认扁平 routes 中也没有 InternalOnly。
 	assertNoRouteForMethod(t, manifest.Routes, "/acme.app.type.v1.AppTypeService/InternalOnly")
@@ -83,10 +88,10 @@ func TestBuildSkipsUnannotatedMethodsUnlessRequested(t *testing.T) {
 // TestBuildFiltersDependencyPackages 覆盖 auth 服务依赖 proto 不应进入 manifest 的场景。
 func TestBuildFiltersDependencyPackages(t *testing.T) {
 	// auth 服务依赖 user/config/secure，但 include_package_prefix 只允许 acme.auth.。
-	plugin := testPlugin(t, "include_package_prefix=acme.auth.,require_include=true,include_unannotated_methods=true", authFile(), userFile(), configFile(), secureFile())
+	plugin := testPlugin(t, "include_package_prefix=acme.auth.", authFile(), userFile(), configFile(), secureFile())
 
 	// 构建 auth manifest。
-	manifest, err := Build(plugin, mustOptions(t, plugin), "v0.1.0")
+	manifest, err := Build(plugin, mustOptions(t, plugin))
 	// 过滤逻辑不应该导致构建失败。
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -102,62 +107,68 @@ func TestBuildFiltersDependencyPackages(t *testing.T) {
 	// 检查 routes 中没有依赖 package 泄露。
 	for _, route := range manifest.Routes {
 		// user/config/secure 都是 auth 输入中的依赖服务，不属于 auth manifest 暴露范围。
-		if strings.HasPrefix(route.GRPCService, "acme.user.") || strings.HasPrefix(route.GRPCService, "acme.config.") || strings.HasPrefix(route.GRPCService, "acme.secure.") {
+		if strings.HasPrefix(route.FullMethod, "/acme.user.") || strings.HasPrefix(route.FullMethod, "/acme.config.") || strings.HasPrefix(route.FullMethod, "/acme.secure.") {
 			t.Fatalf("dependency route leaked into auth manifest: %+v", route)
 		}
 	}
 }
 
-// TestBuildExcludeOverridesInclude 确认 exclude 规则优先级高于 include。
-func TestBuildExcludeOverridesInclude(t *testing.T) {
-	// include acme. 全域，再用 exclude_package_prefix 排除 secure。
-	plugin := testPlugin(t, "include_package_prefix=acme.,exclude_package_prefix=acme.secure.,require_include=true", authFile(), secureFile())
+// TestBuildDeduplicatesRoutes 确认重复 HTTP method+path 默认保留第一条。
+func TestBuildDeduplicatesRoutes(t *testing.T) {
+	// duplicateRouteFile 中两个 service 都声明 GET /v1/dup。
+	plugin := testPlugin(t, "include_package=acme.dup.v1", duplicateRouteFile())
 
-	// 构建 manifest。
-	manifest, err := Build(plugin, mustOptions(t, plugin), "v0.1.0")
-	// 构建不应该失败。
+	// 构建不应失败，重复路由会被去重。
+	manifest, err := Build(plugin, mustOptions(t, plugin))
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
-	// 遍历所有 service，确认 secure 被 exclude 覆盖掉。
-	for _, service := range manifest.Services {
-		// 任何 acme.secure. service 出现都说明 exclude 优先级失效。
-		if strings.HasPrefix(service.Name, "acme.secure.") {
-			t.Fatalf("excluded service leaked into manifest: %s", service.Name)
+	// 两个 service 的重复 GET /v1/dup 应只保留一条 route。
+	if got, want := len(manifest.Routes), 1; got != want {
+		t.Fatalf("routes len = %d, want %d", got, want)
+	}
+}
+
+// TestParseOptionsRejectsRemovedCompatibilityKeys 确认已移除的参数不会被悄悄接受。
+func TestParseOptionsRejectsRemovedCompatibilityKeys(t *testing.T) {
+	// 这些旧参数不再属于现行契约，必须直接报错。
+	for _, parameter := range []string{
+		"out_file=custom.manifest.json",
+		"module=buf.build/lhdht/grpc",
+		"module_ref=main",
+		"descriptor_sha256=abc",
+		"generated_at=2026-05-23T00:00:00Z",
+		"paths=source_relative",
+		"exclude_package=acme.user.v1",
+		"exclude_package_prefix=acme.user.",
+		"exclude_service=acme.user.v1.UserService",
+		"require_include=true",
+		"include_unannotated_methods=true",
+		"fail_on_duplicate_route=true",
+		"emit_yaml=true",
+	} {
+		// ParseOptions 应明确拒绝这些已移除参数。
+		if _, err := ParseOptions(parameter); err == nil {
+			t.Fatalf("ParseOptions(%q) unexpectedly succeeded", parameter)
 		}
 	}
 }
 
-// TestBuildRejectsDuplicateRoutes 确认重复 HTTP method+path 默认阻断生成。
-func TestBuildRejectsDuplicateRoutes(t *testing.T) {
-	// duplicateRouteFile 中两个 service 都声明 GET /v1/dup。
-	plugin := testPlugin(t, "include_package=acme.dup.v1,require_include=true,fail_on_duplicate_route=true", duplicateRouteFile())
-
-	// 构建应失败，因为重复入口路由会导致运行时匹配不确定。
-	_, err := Build(plugin, mustOptions(t, plugin), "v0.1.0")
-	// 错误消息应指出重复的 HTTP route。
-	if err == nil || !strings.Contains(err.Error(), "duplicate http route GET /v1/dup") {
-		t.Fatalf("Build() error = %v, want duplicate route error", err)
+// TestParseOptionsRejectsUnknownOption 确认未知参数直接报错。
+func TestParseOptionsRejectsUnknownOption(t *testing.T) {
+	// 任何不在白名单内的参数都应失败，避免配置歧义。
+	if _, err := ParseOptions("not_a_real_option=true"); err == nil {
+		t.Fatalf("ParseOptions unexpectedly accepted unknown option")
 	}
 }
 
-// TestParseOptionsRequiresIncludeWhenConfigured 确认 require_include 的保护行为。
-func TestParseOptionsRequiresIncludeWhenConfigured(t *testing.T) {
-	// 只开启 require_include 但不传任何 include 条件。
-	_, err := ParseOptions("require_include=true")
-	// 应返回明确错误，提醒调用方指定业务服务范围。
-	if err == nil || !strings.Contains(err.Error(), "requires include_package") {
-		t.Fatalf("ParseOptions() error = %v, want require include error", err)
-	}
-}
-
-// TestGenerateWritesConfiguredOutputFile 覆盖 protoc 插件入口写文件行为。
-func TestGenerateWritesConfiguredOutputFile(t *testing.T) {
-	// out_file 指定自定义输出文件名。
-	plugin := testPlugin(t, "out_file=custom.manifest.json,include_package=acme.app.type.v1,require_include=true", appTypeFile())
+// TestGenerateWritesFixedOutputFile 覆盖 protoc 插件入口写文件行为。
+func TestGenerateWritesFixedOutputFile(t *testing.T) {
+	// 只配置 include 范围，输出文件名固定为 gateway.manifest.json。
+	plugin := testPlugin(t, "include_package=acme.app.type.v1", appTypeFile())
 
 	// Generate 应解析参数、构建 manifest 并写入 protogen response。
-	if err := Generate(plugin, "v0.1.0"); err != nil {
+	if err := Generate(plugin); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	// Response 是 protoc 插件最终会返回给 protoc/buf 的生成结果。
@@ -166,8 +177,8 @@ func TestGenerateWritesConfiguredOutputFile(t *testing.T) {
 	if got, want := len(response.File), 1; got != want {
 		t.Fatalf("generated files len = %d, want %d", got, want)
 	}
-	// 输出文件名应等于 out_file 参数。
-	if got, want := response.File[0].GetName(), "custom.manifest.json"; got != want {
+	// 输出文件名固定为 gateway.manifest.json。
+	if got, want := response.File[0].GetName(), "gateway.manifest.json"; got != want {
 		t.Fatalf("generated file = %q, want %q", got, want)
 	}
 }
@@ -175,10 +186,10 @@ func TestGenerateWritesConfiguredOutputFile(t *testing.T) {
 // TestGenerateMergesMultiplePackagesInSingleInvocation 确认单次插件调用会合并多个 proto package。
 func TestGenerateMergesMultiplePackagesInSingleInvocation(t *testing.T) {
 	// strategy=all 时 Buf 会把所有待生成 proto 放在同一次 CodeGeneratorRequest 中。
-	plugin := testPlugin(t, "include_package_prefix=acme.app.,require_include=true,generated_at=2026-05-23T00:00:00Z", appTypeFile(), appCategoryFile())
+	plugin := testPlugin(t, "include_package_prefix=acme.app.", appTypeFile(), appCategoryFile())
 
 	// Generate 应只写出一个 gateway.manifest.json，而不是按文件分别输出多个同名文件。
-	if err := Generate(plugin, "v0.1.0"); err != nil {
+	if err := Generate(plugin); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	// 读取插件响应，模拟 protoc/buf 最终接收到的文件列表。
@@ -330,7 +341,7 @@ func configFile() *descriptorpb.FileDescriptorProto {
 func secureFile() *descriptorpb.FileDescriptorProto {
 	// 返回 acme.secure.code.verify.email.v1 的 FileDescriptorProto。
 	return protoFile("acme/secure/code/verify/email/v1/email.proto", "acme.secure.code.verify.email.v1",
-		// EmailVerifyService 用于验证 exclude/include 不会误收依赖 secure 服务。
+		// EmailVerifyService 用于验证 include 不会误收依赖 secure 服务。
 		service("EmailVerifyService", method("SendCode", httpPost("/v1/secure/code/verify/email", "*"))),
 	)
 }

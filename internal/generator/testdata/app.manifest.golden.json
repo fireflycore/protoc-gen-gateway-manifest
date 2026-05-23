@@ -1,128 +1,34 @@
 {
   "schema": "firefly.gateway.manifest.v1",
-  "version": "v1",
-  "generated_at": "2026-05-23T00:00:00Z",
-  "generator": {
-    "name": "protoc-gen-gateway-manifest",
-    "version": "v0.1.0"
-  },
-  "source": {
-    "module": "",
-    "module_ref": "",
-    "files": [
-      "acme/app/type/v1/type.proto"
-    ]
-  },
-  "filter": {
-    "include_packages": [
-      "acme.app.type.v1"
-    ],
-    "include_package_prefixes": [],
-    "include_services": [],
-    "exclude_packages": [],
-    "exclude_package_prefixes": [],
-    "exclude_services": [],
-    "require_include": true
-  },
-  "descriptor": {
-    "ref": "",
-    "sha256": ""
-  },
   "services": [
     {
       "name": "acme.app.type.v1.AppTypeService",
-      "proto_package": "acme.app.type.v1",
-      "proto_file": "acme/app/type/v1/type.proto",
       "methods": [
-        {
-          "name": "CreateType",
-          "full_method": "/acme.app.type.v1.AppTypeService/CreateType",
-          "input_type": "acme.app.type.v1.Request",
-          "output_type": "acme.app.type.v1.Response",
-          "http_rules": [
-            {
-              "id": "acme.app.type.v1.AppTypeService.CreateType.http0",
-              "method": "POST",
-              "path": "/v1/app/type",
-              "body": "*",
-              "response_body": "",
-              "transcoding": true
-            },
-            {
-              "id": "acme.app.type.v1.AppTypeService.CreateType.http1",
-              "method": "GET",
-              "path": "/v1/app/type/create-preview",
-              "body": "",
-              "response_body": "",
-              "transcoding": true
-            }
-          ]
-        },
-        {
-          "name": "GetTypeInfo",
-          "full_method": "/acme.app.type.v1.AppTypeService/GetTypeInfo",
-          "input_type": "acme.app.type.v1.Request",
-          "output_type": "acme.app.type.v1.Response",
-          "http_rules": [
-            {
-              "id": "acme.app.type.v1.AppTypeService.GetTypeInfo.http0",
-              "method": "GET",
-              "path": "/v1/app/type",
-              "body": "",
-              "response_body": "",
-              "transcoding": true
-            }
-          ]
-        },
-        {
-          "name": "InternalOnly",
-          "full_method": "/acme.app.type.v1.AppTypeService/InternalOnly",
-          "input_type": "acme.app.type.v1.Request",
-          "output_type": "acme.app.type.v1.Response",
-          "http_rules": []
-        }
+        "/acme.app.type.v1.AppTypeService/CreateType",
+        "/acme.app.type.v1.AppTypeService/GetTypeInfo",
+        "/acme.app.type.v1.AppTypeService/InternalOnly"
       ]
     }
   ],
   "routes": [
     {
       "id": "acme.app.type.v1.AppTypeService.CreateType.http0",
-      "protocol": "grpc",
       "http_method": "POST",
       "path": "/v1/app/type",
       "body": "*",
-      "response_body": "",
-      "grpc_service": "acme.app.type.v1.AppTypeService",
-      "grpc_method": "CreateType",
-      "full_method": "/acme.app.type.v1.AppTypeService/CreateType",
-      "transcoding": true,
-      "proto_file": "acme/app/type/v1/type.proto"
+      "full_method": "/acme.app.type.v1.AppTypeService/CreateType"
     },
     {
       "id": "acme.app.type.v1.AppTypeService.CreateType.http1",
-      "protocol": "grpc",
       "http_method": "GET",
       "path": "/v1/app/type/create-preview",
-      "body": "",
-      "response_body": "",
-      "grpc_service": "acme.app.type.v1.AppTypeService",
-      "grpc_method": "CreateType",
-      "full_method": "/acme.app.type.v1.AppTypeService/CreateType",
-      "transcoding": true,
-      "proto_file": "acme/app/type/v1/type.proto"
+      "full_method": "/acme.app.type.v1.AppTypeService/CreateType"
     },
     {
       "id": "acme.app.type.v1.AppTypeService.GetTypeInfo.http0",
-      "protocol": "grpc",
       "http_method": "GET",
       "path": "/v1/app/type",
-      "body": "",
-      "response_body": "",
-      "grpc_service": "acme.app.type.v1.AppTypeService",
-      "grpc_method": "GetTypeInfo",
-      "full_method": "/acme.app.type.v1.AppTypeService/GetTypeInfo",
-      "transcoding": true,
-      "proto_file": "acme/app/type/v1/type.proto"
+      "full_method": "/acme.app.type.v1.AppTypeService/GetTypeInfo"
     }
   ]
 }

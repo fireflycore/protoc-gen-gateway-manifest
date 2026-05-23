@@ -85,8 +85,6 @@ func convertHTTPRule(rule *annotations.HttpRule) (HTTPRule, error) {
 		Body: strings.TrimSpace(rule.Body),
 		// ResponseBody 是 google.api.http response_body 配置。
 		ResponseBody: strings.TrimSpace(rule.ResponseBody),
-		// Transcoding 固定为 true，因为来源是 google.api.http。
-		Transcoding: true,
 	}, nil
 }
 

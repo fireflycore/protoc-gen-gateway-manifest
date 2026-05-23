@@ -13,27 +13,24 @@ plugins:
     # 单个 gateway.manifest.json 需要合并所有待生成 proto，不能使用 Buf 默认的 directory 策略。
     strategy: all
     opt:
-      - out_file=gateway.manifest.json
+      - descriptor_ref=oci://artifact-registry/firefly/descriptors/auth:v1.2.3
       - include_package_prefix=acme.auth.
-      - require_include=true
-      - include_unannotated_methods=true
-      - fail_on_duplicate_route=true
 ```
 
-没有 `google.api.http` 的 gRPC method 只会作为 gRPC 能力进入 `services[].methods`，不会进入 `routes[]`，也不会被自动合成 HTTP path。
+所有 gRPC method 都会进入 `services[].methods`。没有 `google.api.http` 的 method 不会进入 `routes[]`，也不会被自动合成 HTTP path。
 
 注意：本插件生成的是单个聚合文件，Buf 配置必须设置 `strategy: all`。如果使用默认 `directory` 策略，Buf 会按目录多次调用插件，每次都会生成同名 `gateway.manifest.json`，从而出现 `duplicate generated file name` 并丢弃后续产物。
 
 ## 参数
 
-- `out_file`：输出文件名，默认 `gateway.manifest.json`。
-- `module` / `module_ref`：写入 `source` 元数据。
-- `descriptor_ref` / `descriptor_sha256`：写入 descriptor 引用。
+- `descriptor_ref`：写入 `descriptor_ref`，供 api-gateway 加载 descriptor set。
 - `include_package` / `include_package_prefix` / `include_service`：只生成当前业务服务拥有的 proto 范围。
-- `exclude_package` / `exclude_package_prefix` / `exclude_service`：排除依赖服务。
-- `require_include=true`：强制配置 include，生产模板建议开启。
-- `include_unannotated_methods=true`：保留未标注 HTTP 的 gRPC method，但不生成 HTTP route。
-- `fail_on_duplicate_route=true`：重复 HTTP method + path 时失败。
+
+输出文件名固定为 `gateway.manifest.json`。重复 HTTP method + path 时保留第一条 route，后续重复项跳过。未配置 include 时，插件只处理本次 `file_to_generate` 中的 service；业务服务有依赖 proto 时，建议显式配置 include 范围。
+
+`descriptor_ref` 是 descriptor set 的加载地址或版本引用，不是路由元数据。api-gateway/Envoy 做 gRPC-JSON 转码时需要 descriptor set 才能知道 JSON 字段、path 参数和 protobuf message 之间如何映射。
+
+输出 schema 只保留运行时消费所需字段：`schema`、`descriptor_ref`、`services[]`、`routes[]`。
 
 ## 开发
 
