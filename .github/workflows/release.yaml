@@ -1,0 +1,29 @@
+name: release
+
+on:
+  release:
+    types: [created] # 标识在创建新的 Release 时触发
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    name: "release"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows] # 需要打包的系统
+        goarch: [amd64, arm64] # 需要打包的架构
+        exclude: # 排除某些平台和架构
+          - goarch: arm64
+            goos: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: wangyoucao577/go-release-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }} # 一个默认的变量，用来实现往 Release 中添加文件
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          extra_files: LICENSE README.md # 需要包含的额外文件
