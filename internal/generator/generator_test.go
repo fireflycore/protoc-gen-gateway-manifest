@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -171,6 +172,40 @@ func TestGenerateWritesConfiguredOutputFile(t *testing.T) {
 	}
 }
 
+// TestGenerateMergesMultiplePackagesInSingleInvocation 确认单次插件调用会合并多个 proto package。
+func TestGenerateMergesMultiplePackagesInSingleInvocation(t *testing.T) {
+	// strategy=all 时 Buf 会把所有待生成 proto 放在同一次 CodeGeneratorRequest 中。
+	plugin := testPlugin(t, "include_package_prefix=acme.app.,require_include=true,generated_at=2026-05-23T00:00:00Z", appTypeFile(), appCategoryFile())
+
+	// Generate 应只写出一个 gateway.manifest.json，而不是按文件分别输出多个同名文件。
+	if err := Generate(plugin, "v0.1.0"); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	// 读取插件响应，模拟 protoc/buf 最终接收到的文件列表。
+	response := plugin.Response()
+	// 聚合 manifest 必须只有一个输出文件，避免 Buf 报 duplicate generated file name。
+	if got, want := len(response.File), 1; got != want {
+		t.Fatalf("generated files len = %d, want %d", got, want)
+	}
+	// 默认输出文件名应保持 gateway.manifest.json。
+	if got, want := response.File[0].GetName(), "gateway.manifest.json"; got != want {
+		t.Fatalf("generated file = %q, want %q", got, want)
+	}
+	// 解析输出内容，确认两个 app package 的 service 都被合并进入同一个 manifest。
+	var manifest Manifest
+	if err := unmarshalManifest(response.File[0].GetContent(), &manifest); err != nil {
+		t.Fatalf("unmarshal generated manifest: %v", err)
+	}
+	// 两个测试 proto package 应合并成两个 service 条目。
+	if got, want := len(manifest.Services), 2; got != want {
+		t.Fatalf("services len = %d, want %d", got, want)
+	}
+	// appTypeFile 有三条 route，appCategoryFile 有一条 route，合并后应全部保留。
+	if got, want := len(manifest.Routes), 4; got != want {
+		t.Fatalf("routes len = %d, want %d", got, want)
+	}
+}
+
 // mustOptions 解析插件参数，失败时直接终止测试。
 func mustOptions(t *testing.T, plugin *protogen.Plugin) Options {
 	// 标记为测试 helper，使失败行号指向调用处。
@@ -196,6 +231,12 @@ func assertNoRouteForMethod(t *testing.T, routes []Route, fullMethod string) {
 			t.Fatalf("unexpected HTTP route for gRPC-only method: %+v", route)
 		}
 	}
+}
+
+// unmarshalManifest 解析生成器输出的 JSON manifest。
+func unmarshalManifest(content string, manifest *Manifest) error {
+	// 使用标准 JSON 解析器，确保测试覆盖真实输出格式。
+	return json.Unmarshal([]byte(content), manifest)
 }
 
 // testPlugin 根据手写 descriptor 构造 protogen.Plugin。
@@ -237,6 +278,18 @@ func appTypeFile() *descriptorpb.FileDescriptorProto {
 			method("GetTypeInfo", httpGet("/v1/app/type")),
 			// InternalOnly 没有 google.api.http，因此只能作为 gRPC-only 方法。
 			method("InternalOnly", nil),
+		),
+	)
+}
+
+// appCategoryFile 构造第二个 app package，验证 strategy=all 下的跨 package 合并。
+func appCategoryFile() *descriptorpb.FileDescriptorProto {
+	// 返回 acme.app.category.v1 的 FileDescriptorProto。
+	return protoFile("acme/app/category/v1/category.proto", "acme.app.category.v1",
+		// AppCategoryService 用于验证第二个 package 能进入同一个 manifest。
+		service("AppCategoryService",
+			// ListCategories 通过 GET 暴露一条独立 HTTP route。
+			method("ListCategories", httpGet("/v1/app/categories")),
 		),
 	)
 }
