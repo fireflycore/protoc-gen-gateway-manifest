@@ -13,7 +13,7 @@ plugins:
     # 单个 gateway.manifest.json 需要合并所有待生成 proto，不能使用 Buf 默认的 directory 策略。
     strategy: all
     opt:
-      - descriptor_ref=oci://artifact-registry/firefly/descriptors/auth:v1.2.3
+      - descriptor_ref=https://minio.local.com/descriptor/auth/v0.0.1.pb
       - include_package_prefix=acme.auth.
 ```
 
