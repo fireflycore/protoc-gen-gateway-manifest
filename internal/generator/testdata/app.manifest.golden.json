@@ -12,20 +12,16 @@
   ],
   "routes": [
     {
-      "id": "acme.app.type.v1.AppTypeService.CreateType.http0",
       "http_method": "POST",
       "path": "/v1/app/type",
-      "body": "*",
       "full_method": "/acme.app.type.v1.AppTypeService/CreateType"
     },
     {
-      "id": "acme.app.type.v1.AppTypeService.CreateType.http1",
       "http_method": "GET",
       "path": "/v1/app/type/create-preview",
       "full_method": "/acme.app.type.v1.AppTypeService/CreateType"
     },
     {
-      "id": "acme.app.type.v1.AppTypeService.GetTypeInfo.http0",
       "http_method": "GET",
       "path": "/v1/app/type",
       "full_method": "/acme.app.type.v1.AppTypeService/GetTypeInfo"

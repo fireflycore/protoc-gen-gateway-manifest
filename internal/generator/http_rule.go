@@ -28,7 +28,7 @@ func httpRulesForMethod(serviceFullName string, method *protogen.Method) ([]HTTP
 
 	// rules 收集主规则和 additional_bindings 展开后的所有 HTTPRule。
 	var rules []HTTPRule
-	// methodName 用于生成稳定 route ID 和错误上下文。
+	// methodName 用于生成稳定错误上下文。
 	methodName := string(method.Desc.Name())
 	// appendHTTPRule 会展开 root 与 additional_bindings，并执行基础校验。
 	if err := appendHTTPRule(serviceFullName, methodName, root, &rules); err != nil {
@@ -42,7 +42,7 @@ func httpRulesForMethod(serviceFullName string, method *protogen.Method) ([]HTTP
 func appendHTTPRule(serviceFullName, methodName string, root *annotations.HttpRule, rules *[]HTTPRule) error {
 	// google.api.http 的 additional_bindings 与主规则语义相同，都需要生成路由。
 	allRules := append([]*annotations.HttpRule{root}, root.AdditionalBindings...)
-	// index 是 binding 序号，用于构造稳定 ID；0 表示主规则。
+	// index 是 binding 序号，0 表示主规则，方便错误上下文定位。
 	for index, rule := range allRules {
 		// convertHTTPRule 将 protobuf HttpRule 转成 manifest HTTPRule。
 		httpRule, err := convertHTTPRule(rule)
@@ -50,8 +50,6 @@ func appendHTTPRule(serviceFullName, methodName string, root *annotations.HttpRu
 		if err != nil {
 			return fmt.Errorf("%s/%s http%d: %w", serviceFullName, methodName, index, err)
 		}
-		// ID 采用 service.method.httpN，确保 additional binding 有稳定标识。
-		httpRule.ID = fmt.Sprintf("%s.%s.http%d", serviceFullName, methodName, index)
 		// validateHTTPRule 负责检查 method token 和 path template 的基础合法性。
 		if err := validateHTTPRule(httpRule); err != nil {
 			return fmt.Errorf("%s/%s http%d: %w", serviceFullName, methodName, index, err)
@@ -75,16 +73,12 @@ func convertHTTPRule(rule *annotations.HttpRule) (HTTPRule, error) {
 	if err != nil {
 		return HTTPRule{}, err
 	}
-	// 返回 manifest 规则；ID 由 appendHTTPRule 根据 binding 序号补充。
+	// 返回 manifest 规则。
 	return HTTPRule{
 		// Method 是标准化后的 HTTP 方法。
 		Method: method,
 		// Path 是清理空白后的 HTTP path template。
 		Path: path,
-		// Body 是 google.api.http body 配置，空值表示无请求体映射。
-		Body: strings.TrimSpace(rule.Body),
-		// ResponseBody 是 google.api.http response_body 配置。
-		ResponseBody: strings.TrimSpace(rule.ResponseBody),
 	}, nil
 }
 

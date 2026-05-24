@@ -54,7 +54,7 @@ func Build(plugin *protogen.Plugin, options Options) (Manifest, error) {
 	}
 
 	// routeKeys 用 method+path 去重 HTTP 路由，避免生成重复入口。
-	routeKeys := make(map[string]string)
+	routeKeys := make(map[string]struct{})
 	// 按稳定顺序遍历待生成文件，保证每次生成结果可重复。
 	for _, file := range files {
 		// protoPackage 是 include 按 package 过滤时的主输入。
@@ -161,24 +161,18 @@ func buildService(service *protogen.Service, serviceFullName string, options Opt
 func buildRoute(serviceFullName, methodName string, httpRule HTTPRule) Route {
 	// Route 是 HTTP 维度的扁平视图，运行时无需再遍历 service/method 树。
 	return Route{
-		// ID 使用 HTTPRule 中已经生成的稳定 binding ID。
-		ID: httpRule.ID,
 		// HTTPMethod 是网关匹配请求 method 的主键之一。
 		HTTPMethod: httpRule.Method,
 		// Path 是网关匹配请求 path template 的主键之一。
 		Path: httpRule.Path,
-		// Body 原样传递 google.api.http body 规则。
-		Body: httpRule.Body,
-		// ResponseBody 原样传递 google.api.http response_body 规则。
-		ResponseBody: httpRule.ResponseBody,
 		// FullMethod 是标准 gRPC 调用路径，便于运行时直接路由或打日志。
 		FullMethod: "/" + serviceFullName + "/" + methodName,
 	}
 }
 
 // appendRoutes 追加路由并按 HTTP method + path 去重。
-func appendRoutes(target *[]Route, routeKeys map[string]string, routes []Route) {
-	// 逐条处理 route，便于在发现重复时报告具体冲突 ID。
+func appendRoutes(target *[]Route, routeKeys map[string]struct{}, routes []Route) {
+	// 逐条处理 route，便于在发现重复时跳过后续映射。
 	for _, route := range routes {
 		// HTTP method + path 是网关入口匹配的天然唯一键。
 		key := route.HTTPMethod + " " + route.Path
@@ -186,8 +180,8 @@ func appendRoutes(target *[]Route, routeKeys map[string]string, routes []Route) 
 		if _, exists := routeKeys[key]; exists {
 			continue
 		}
-		// 记录当前 key 的来源 ID，保证后续重复项可被识别。
-		routeKeys[key] = route.ID
+		// 记录当前 key 已被占用。
+		routeKeys[key] = struct{}{}
 		// 将 route 追加到目标切片。
 		*target = append(*target, route)
 	}
@@ -235,15 +229,16 @@ func sortServices(services []Service) {
 	})
 }
 
-// sortRoutes 原地按 full method 和 binding ID 排序扁平路由。
+// sortRoutes 原地按 full method、path 和 HTTP method 排序扁平路由。
 func sortRoutes(routes []Route) {
 	// 组合排序 key 可以让 route 输出同时兼顾来源定位和稳定 diff。
 	sort.Slice(routes, func(i, j int) bool {
-		// 使用 NUL 分隔字段，避免普通字符分隔导致 key 拼接歧义。
-		left := strings.Join([]string{routes[i].FullMethod, routes[i].ID}, "\x00")
-		// right 与 left 使用相同字段顺序，确保比较语义一致。
-		right := strings.Join([]string{routes[j].FullMethod, routes[j].ID}, "\x00")
-		// 字典序比较组合 key。
-		return left < right
+		if routes[i].FullMethod != routes[j].FullMethod {
+			return routes[i].FullMethod < routes[j].FullMethod
+		}
+		if routes[i].Path != routes[j].Path {
+			return routes[i].Path < routes[j].Path
+		}
+		return routes[i].HTTPMethod < routes[j].HTTPMethod
 	})
 }

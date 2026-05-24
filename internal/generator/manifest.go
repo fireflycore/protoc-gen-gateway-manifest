@@ -25,30 +25,18 @@ type Service struct {
 
 // Route 表示一条 HTTP 到 gRPC 的路由映射。
 type Route struct {
-	// ID 是稳定的路由标识，包含 service、method 和 binding 序号。
-	ID string `json:"id"`
 	// HTTPMethod 是网关匹配时使用的 HTTP 方法。
 	HTTPMethod string `json:"http_method"`
 	// Path 是网关匹配时使用的 path template。
 	Path string `json:"path"`
-	// Body 是 google.api.http body 映射。
-	Body string `json:"body,omitempty"`
-	// ResponseBody 是 google.api.http response_body 映射。
-	ResponseBody string `json:"response_body,omitempty"`
 	// FullMethod 是目标 gRPC full method。
 	FullMethod string `json:"full_method"`
 }
 
 // HTTPRule 是从 google.api.http 提取出的内部中间结构，不直接输出到 manifest。
 type HTTPRule struct {
-	// ID 是稳定的 binding 标识。
-	ID string
 	// Method 是标准化后的 HTTP 方法。
 	Method string
 	// Path 是 HTTP path template。
 	Path string
-	// Body 是请求体映射规则。
-	Body string
-	// ResponseBody 是响应体映射规则。
-	ResponseBody string
 }
