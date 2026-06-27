@@ -4,6 +4,25 @@
 
 它只生成机器可读契约，不生成 Envoy xDS，也不生成业务 HTTP handler。
 
+当前插件版本：`v0.0.5`。
+
+代码结构：
+
+```text
+cmd/protoc-gen-gateway-manifest    protoc 插件二进制入口
+internal/generator                 manifest 生成、过滤、HTTP rule 解析和校验
+```
+
+## 安装
+
+普通使用者推荐直接安装已发布版本，不需要从源码构建：
+
+```bash
+go install github.com/fireflycore/protoc-gen-gateway-manifest/cmd/protoc-gen-gateway-manifest@v0.0.5
+```
+
+安装后确保 `$GOBIN` 或 `$GOPATH/bin` 在 `PATH` 中，Buf/protoc 才能找到 `protoc-gen-gateway-manifest`。
+
 ## Buf 示例
 
 ```yaml
@@ -31,6 +50,8 @@ api-gateway/Envoy 做 gRPC-JSON 转码时需要 descriptor set 才能知道 JSON
 输出 schema 只保留运行时消费所需字段：`schema`、`services[]`、`routes[]`。`routes[]` 仅包含 `http_method`、`path`、`full_method`。
 
 ## 开发
+
+只有在本地修改插件代码时，才需要从源码测试或构建：
 
 ```bash
 go test ./...
