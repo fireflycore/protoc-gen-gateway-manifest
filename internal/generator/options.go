@@ -11,8 +11,6 @@ const DefaultOutFile = "gateway.manifest.json"
 
 // Options 保存 protoc/buf 传给插件的所有参数。
 type Options struct {
-	// DescriptorRef 是运行时可加载的 descriptor set 引用。
-	DescriptorRef string
 	// IncludePackages 是允许生成的精确 proto package 列表。
 	IncludePackages []string
 	// IncludePackagePrefixes 是允许生成的 proto package 前缀列表。
@@ -88,9 +86,6 @@ func defaultOptions() Options {
 func (o *Options) apply(key, value string) error {
 	// 根据参数名分派到对应字段。
 	switch key {
-	case "descriptor_ref":
-		// descriptor_ref 记录运行时 descriptor set 引用。
-		o.DescriptorRef = value
 	case "include_package":
 		// include_package 支持单个值，也支持 ; 或 | 分隔多个值。
 		o.IncludePackages = append(o.IncludePackages, splitOptionValues(value)...)
@@ -110,8 +105,6 @@ func (o *Options) apply(key, value string) error {
 
 // normalize 规范化 Options 字段，保证输出稳定。
 func (o *Options) normalize() {
-	// descriptor_ref 去除首尾空白。
-	o.DescriptorRef = strings.TrimSpace(o.DescriptorRef)
 	// include package 列表去空白、去重并排序。
 	o.IncludePackages = uniqueSorted(o.IncludePackages)
 	// include package prefix 列表去空白、去重并排序。

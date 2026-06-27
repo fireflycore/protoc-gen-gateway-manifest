@@ -7,8 +7,6 @@ const ManifestSchema = "firefly.gateway.manifest.v1"
 type Manifest struct {
 	// Schema 用于让消费方识别当前 manifest 类型。
 	Schema string `json:"schema"`
-	// DescriptorRef 记录 api-gateway 加载 descriptor 的引用。
-	DescriptorRef string `json:"descriptor_ref,omitempty"`
 	// Services 记录 gRPC service 及其完整 method 名称。
 	Services []Service `json:"services"`
 	// Routes 记录可直接消费的 HTTP 路由。

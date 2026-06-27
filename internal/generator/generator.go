@@ -45,8 +45,6 @@ func Build(plugin *protogen.Plugin, options Options) (Manifest, error) {
 	manifest := Manifest{
 		// Schema 是控制面识别当前文件类型的固定标识。
 		Schema: ManifestSchema,
-		// DescriptorRef 只保存 descriptor 引用，不内嵌完整 descriptor 内容。
-		DescriptorRef: options.DescriptorRef,
 		// Services 保留 service/method 视图，供 sidecar-agent 注册时使用。
 		Services: []Service{},
 		// Routes 保留扁平 HTTP 路由视图，供 api-gateway 快速装载。

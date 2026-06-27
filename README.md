@@ -13,7 +13,6 @@ plugins:
     # 单个 gateway.manifest.json 需要合并所有待生成 proto，不能使用 Buf 默认的 directory 策略。
     strategy: all
     opt:
-      - descriptor_ref=https://minio.local.com/descriptor/auth/v0.0.1.pb
       - include_package_prefix=acme.auth.
 ```
 
@@ -23,14 +22,13 @@ plugins:
 
 ## 参数
 
-- `descriptor_ref`：写入 `descriptor_ref`，供 api-gateway 加载 descriptor set。
 - `include_package` / `include_package_prefix` / `include_service`：只生成当前业务服务拥有的 proto 范围。
 
 输出文件名固定为 `gateway.manifest.json`，默认落在 `dep/protobuf/gen/`。重复 HTTP method + path 时保留第一条 route，后续重复项跳过。未配置 include 时，插件只处理本次 `file_to_generate` 中的 service；业务服务有依赖 proto 时，建议显式配置 include 范围。
 
-`descriptor_ref` 是 descriptor set 的加载地址或版本引用，不是路由元数据。api-gateway/Envoy 做 gRPC-JSON 转码时需要 descriptor set 才能知道 JSON 字段、path 参数和 protobuf message 之间如何映射。
+api-gateway/Envoy 做 gRPC-JSON 转码时需要 descriptor set 才能知道 JSON 字段、path 参数和 protobuf message 之间如何映射。新主线由 proto 仓库按 namespace 发布 descriptor current；业务服务 manifest 只表达 service/method/HTTP route 事实。
 
-输出 schema 只保留运行时消费所需字段：`schema`、`descriptor_ref`、`services[]`、`routes[]`。`routes[]` 仅包含 `http_method`、`path`、`full_method`。
+输出 schema 只保留运行时消费所需字段：`schema`、`services[]`、`routes[]`。`routes[]` 仅包含 `http_method`、`path`、`full_method`。
 
 ## 开发
 
