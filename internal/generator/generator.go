@@ -17,7 +17,14 @@ func Generate(plugin *protogen.Plugin) error {
 	if err != nil {
 		return err
 	}
+	files := generatedFiles(plugin)
+	// 如果配置了 opt 前置条件，但当前调用的所有待生成文件都不属于业务服务范围（如纯依赖模块 validate/xds 等），
+	// 则直接跳过生成，避免将业务服务的有效 manifest 覆写为空。
+	if options.hasInclude() && !options.matchesInvocation(files) {
+		return nil
+	}
 	// Build 负责把 descriptor 里的 service/method/http annotation 转换为 Manifest。
+	// 若业务服务自身没有可用 route 或 method，仍然会正常生成一个合法的空 manifest。
 	manifest, err := Build(plugin, options)
 	// descriptor 或规则校验失败时直接中止本次代码生成。
 	if err != nil {

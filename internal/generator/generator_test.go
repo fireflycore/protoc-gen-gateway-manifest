@@ -217,6 +217,46 @@ func TestGenerateMergesMultiplePackagesInSingleInvocation(t *testing.T) {
 	}
 }
 
+// TestGenerateSkipsUnmatchedInvocationWhenHasInclude 确认当配置了 include 条件但当前调用全为无关依赖文件时跳过生成。
+func TestGenerateSkipsUnmatchedInvocationWhenHasInclude(t *testing.T) {
+	// 配置了 acme.auth. 前缀，但当前传入的是 user/config 依赖文件。
+	plugin := testPlugin(t, "include_package_prefix=acme.auth.", userFile(), configFile())
+
+	if err := Generate(plugin); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	// 依赖模块不属于业务服务，不应生成任何文件，避免覆写有效 manifest。
+	response := plugin.Response()
+	if got, want := len(response.File), 0; got != want {
+		t.Fatalf("expected 0 generated files for unmatched dependency invocation, got %d", got)
+	}
+}
+
+// TestGenerateWritesEmptyManifestWhenTargetServiceHasNoRoutesOrMethods 确认业务服务自身即便无可用方法/路由，也必须生成合法空 manifest。
+func TestGenerateWritesEmptyManifestWhenTargetServiceHasNoRoutesOrMethods(t *testing.T) {
+	// 构造一个包名匹配但没有声明任何 gRPC method 的文件。
+	emptyServiceFile := protoFile("acme/empty/v1/empty.proto", "acme.empty.v1", service("EmptyService"))
+	plugin := testPlugin(t, "include_package=acme.empty.v1", emptyServiceFile)
+
+	if err := Generate(plugin); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	response := plugin.Response()
+	if got, want := len(response.File), 1; got != want {
+		t.Fatalf("expected 1 generated file, got %d", got)
+	}
+	var manifest Manifest
+	if err := unmarshalManifest(response.File[0].GetContent(), &manifest); err != nil {
+		t.Fatalf("unmarshal generated manifest: %v", err)
+	}
+	if got, want := len(manifest.Services), 0; got != want {
+		t.Fatalf("expected 0 services, got %d", got)
+	}
+	if got, want := len(manifest.Routes), 0; got != want {
+		t.Fatalf("expected 0 routes, got %d", got)
+	}
+}
+
 // mustOptions 解析插件参数，失败时直接终止测试。
 func mustOptions(t *testing.T, plugin *protogen.Plugin) Options {
 	// 标记为测试 helper，使失败行号指向调用处。
